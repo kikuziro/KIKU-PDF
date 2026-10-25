@@ -31,8 +31,11 @@ PDF 파일은 어디에도 올라가지 않아요. 열기, 필기, 저장이 모
    - **Public**을 선택해요. 무료 계정은 공개 저장소에서만 Pages를 쓸 수 있어요. 공개되는 것은 앱 코드뿐이고, 내 PDF는 올라가지 않아요.
    - **Create repository**를 눌러요.
 3. 새 저장소 화면에서 **uploading an existing file** 링크를 눌러요.
-4. 이 폴더 **안의 내용 전부**(index.html, manifest.webmanifest, sw.js, README.md, icons 폴더, vendor 폴더)를 끌어다 놓아요.
-   폴더 자체가 아니라 그 안의 항목들을 올려야 해요.
+4. 탐색기에서 이 폴더 **안의 항목 전부**를 선택해요. index.html, manifest.webmanifest, sw.js, README.md, **icons 폴더, vendor 폴더**까지 모두예요.
+   그다음 브라우저 화면으로 **끌어다 놓아요.**
+   - 'choose your files' 버튼으로 고르면 폴더가 빠지니까, 꼭 끌어다 놓아야 해요.
+   - 바깥 폴더(pdf-pilgi-app) 자체가 아니라 그 안의 항목들을 올려야 해요.
+   - 다 올라가면 목록에 `icons/...`, `vendor/...` 파일이 보이는지 확인해요. 전부 32개예요.
 5. 아래쪽 **Commit changes**를 눌러요.
 6. 저장소의 **Settings** → 왼쪽 **Pages**로 가요.
    - Source: **Deploy from a branch**
