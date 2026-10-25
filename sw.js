@@ -1,6 +1,6 @@
 // PDF 필기장 service worker: keeps the app and its PDF engine on this computer so it opens offline.
 // When you change any file of the app, raise VERSION by one so installed copies pick up the change.
-const VERSION = 'pdf-pilgi-v2';
+const VERSION = 'pdf-pilgi-v3';
 const FONT_CACHE = 'pdf-pilgi-fonts';
 const FILES = ["./", "index.html", "manifest.webmanifest", "vendor/pdf-lib.min.js", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js", "vendor/pdfjs/cmaps.bin", "icons/apple-touch-icon.png", "icons/favicon-32.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "vendor/pdfjs/standard_fonts/FoxitDingbats.pfb", "vendor/pdfjs/standard_fonts/FoxitFixed.pfb", "vendor/pdfjs/standard_fonts/FoxitFixedBold.pfb", "vendor/pdfjs/standard_fonts/FoxitFixedBoldItalic.pfb", "vendor/pdfjs/standard_fonts/FoxitFixedItalic.pfb", "vendor/pdfjs/standard_fonts/FoxitSerif.pfb", "vendor/pdfjs/standard_fonts/FoxitSerifBold.pfb", "vendor/pdfjs/standard_fonts/FoxitSerifBoldItalic.pfb", "vendor/pdfjs/standard_fonts/FoxitSerifItalic.pfb", "vendor/pdfjs/standard_fonts/FoxitSymbol.pfb", "vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf", "vendor/pdfjs/standard_fonts/LiberationSans-BoldItalic.ttf", "vendor/pdfjs/standard_fonts/LiberationSans-Italic.ttf", "vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf"];
 
