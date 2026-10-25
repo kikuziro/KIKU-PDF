@@ -1,0 +1,1635 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PDF 필기장</title>
+<meta name="description" content="PDF에 형광펜, 밑줄, 펜, 메모로 필기하고 원본 파일에 바로 저장해요.">
+<meta name="theme-color" content="#FAFBFC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B1F25" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: a sticky tool strip over a cool grey desk; PDF pages sit on the desk as white sheets */
+:root{
+  --desk:#E4E8EE;
+  --bar:#FAFBFC;
+  --chip:#EDF0F4;
+  --ink:#1A1E24;
+  --muted:#5C6572;
+  --line:#D0D6DE;
+  --accent:#1D4ED8;
+  --on-accent:#FFFFFF;
+  --warn:#B4530A;
+  --danger:#C2255C;
+  --paper:#FFFFFF;
+  --sel:rgba(29,78,216,.26);
+  --shadow:0 1px 2px rgba(18,28,48,.12),0 6px 18px rgba(18,28,48,.08);
+  --f-ui:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --desk:#121519;--bar:#1B1F25;--chip:#252A32;--ink:#E6E9EE;--muted:#99A2AE;--line:#313842;
+    --accent:#8AA8FF;--on-accent:#0C1430;--warn:#F2A65A;--danger:#F06595;--paper:#FFFFFF;
+    --sel:rgba(29,78,216,.30);--shadow:0 1px 2px rgba(0,0,0,.5),0 8px 22px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--desk);color:var(--ink);font:14px/1.5 var(--f-ui);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+kbd{font:500 11px/1 var(--f-num);padding:2px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;background:var(--bar);color:var(--muted)}
+
+/* ---------- tool strip ---------- */
+.bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;background:var(--bar);border-bottom:1px solid var(--line);
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:calc(8px + env(safe-area-inset-top,0px));position:relative;z-index:20}
+.doc{display:flex;flex-direction:column;flex:1 1 120px;min-width:0;max-width:280px;margin-right:auto;line-height:1.25}
+.doc b{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status{font-size:12px;color:var(--muted);white-space:nowrap}
+.status.dirty{color:var(--warn)}
+.status.err{color:var(--danger)}
+.grp{display:inline-flex;align-items:center;gap:2px;background:var(--chip);border-radius:10px;padding:3px}
+.ib{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 9px;border:0;border-radius:8px;background:transparent;cursor:pointer;white-space:nowrap}
+.ib svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ib:hover{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.ib:focus-visible,.sw:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ib[aria-pressed="true"]{background:var(--bar);color:var(--accent);box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(0,0,0,.08)}
+.ib:disabled{opacity:.35;cursor:default;background:transparent}
+.ib .lbl{font-size:13px}
+.sw{width:22px;height:22px;border-radius:50%;border:2px solid var(--bar);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;margin:0 3px}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+.wd{width:32px;justify-content:center;padding:0}
+.wd i{display:block;width:16px;border-radius:9px;background:currentColor}
+.zoom .ib{padding:0 8px}
+#zlabel{min-width:62px;justify-content:center;font:500 12px var(--f-num);font-variant-numeric:tabular-nums}
+#pageno{font:500 12px var(--f-num);color:var(--muted);padding:0 8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--bar);cursor:pointer;font-weight:500}
+.btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.primary:disabled{opacity:.45;cursor:default}
+.btn:hover:not(:disabled){filter:brightness(1.05)}
+.no-doc .needs-doc{display:none}
+@media (max-width:1440px){.tools .lbl{display:none}}
+@media (max-width:640px){.doc{max-width:none;flex-basis:100%}}
+
+/* ---------- desk & pages ---------- */
+#desk{flex:1;overflow:auto;position:relative;overscroll-behavior:contain}
+#viewer{display:flex;flex-direction:column;align-items:flex-start;gap:30px;width:max-content;min-width:100%;
+  padding-block:24px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.spread{display:flex;gap:14px;align-items:flex-start;flex:none;margin-inline:auto}
+.page{position:relative;flex:none;background:var(--paper);box-shadow:var(--shadow)}
+#viewer.pinching{will-change:transform}
+.page canvas{position:absolute;inset:0;display:block}
+.page .pnum{position:absolute;right:0;bottom:-21px;font:500 11px var(--f-num);color:var(--muted);pointer-events:none}
+svg.ann{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible;mix-blend-mode:multiply}
+svg.ann *{pointer-events:none}
+svg.ann .tmp-rect{fill:var(--sel);stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3}
+.draw{position:absolute;inset:0;z-index:3;display:none;cursor:crosshair;touch-action:none}
+.notes{position:absolute;inset:0;z-index:4;pointer-events:none}
+.note-btn{position:absolute;width:24px;height:24px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;transform:translate(-2px,-2px)}
+.note-btn svg{width:24px;height:24px;display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
+.note-btn:focus-visible{outline:2px solid var(--accent);border-radius:4px}
+.note-btn.card{transform:none;height:auto;cursor:grab}
+.note-btn.card img{display:block;width:100%;height:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.28));pointer-events:none;user-select:none;-webkit-user-drag:none}
+.note-btn.dragging{cursor:grabbing;opacity:.85}
+.note-btn .rs{position:absolute;right:-7px;bottom:-7px;width:20px;height:20px;cursor:nwse-resize;touch-action:none;opacity:0;transition:opacity .12s}
+.note-btn .rs::after{content:"";position:absolute;right:5px;bottom:5px;width:9px;height:9px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);border-radius:0 0 2px 0}
+.note-btn.card:hover .rs,.note-btn.card:focus-visible .rs,.note-btn.resizing .rs{opacity:1}
+@media (hover:none){.note-btn .rs{opacity:1}}
+.note-btn.resizing{cursor:nwse-resize}
+@media (prefers-reduced-motion:reduce){.note-btn .rs{transition:none}}
+
+/* pdf.js text layer (3.11) */
+.textLayer{position:absolute;text-align:initial;inset:0;overflow:hidden;line-height:1;-webkit-text-size-adjust:none;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;z-index:2}
+.textLayer :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+.textLayer span.markedContent{top:0;height:0}
+.textLayer ::selection{background:var(--sel)}
+.textLayer br::selection{background:transparent}
+.textLayer .endOfContent{display:block;position:absolute;inset:100% 0 0;z-index:-1;cursor:default;user-select:none;-webkit-user-select:none}
+.textLayer.selecting .endOfContent{top:0}
+
+/* tool modes */
+.t-highlight .textLayer,.t-underline .textLayer{cursor:crosshair}
+.t-ink .draw,.t-note .draw{display:block}
+.t-note .draw{cursor:copy}
+.t-erase .textLayer{pointer-events:none}
+.t-erase svg.ann{z-index:5;cursor:pointer}
+.t-erase svg.ann [data-id]{pointer-events:visiblePainted}
+.t-erase .page{touch-action:none;cursor:pointer}
+.t-erase .note-btn{z-index:6}
+
+/* note editor */
+.note-pop{position:absolute;z-index:8;width:260px;max-width:calc(100% - 16px);background:var(--bar);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px;display:flex;flex-direction:column;gap:8px}
+.note-pop textarea{width:100%;min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px;font:14px/1.5 var(--f-ui);background:var(--paper);color:#1A1E24}
+.note-pop textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.note-pop .row{display:flex;align-items:center;gap:8px}
+.note-pop .row span{flex:1;font-size:12px;color:var(--muted)}
+.note-pop button{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line);background:var(--bar);cursor:pointer;font-size:13px}
+.note-pop .done{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.note-pop .del{color:var(--danger)}
+.note-pop .seg{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--chip)}
+.note-pop .seg button{flex:1;height:28px;border:0;background:transparent;font-size:12.5px;color:var(--muted)}
+.note-pop .seg button[aria-pressed="true"]{background:var(--bar);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.note-pop .tip{margin:0;font-size:12px;line-height:1.45;color:var(--warn)}
+#coverBtn{font-size:12.5px}
+
+/* ---------- empty state ---------- */
+#empty{max-width:720px;margin:0 auto;padding-block:56px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+#empty h1{font-size:30px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+#empty .lead{margin:0;font-size:16px;color:var(--muted);max-width:60ch}
+.drop{border:1.5px dashed var(--line);border-radius:14px;padding:26px;display:flex;flex-direction:column;gap:14px;background:color-mix(in srgb,var(--bar) 70%,transparent)}
+.drop .acts{display:flex;flex-wrap:wrap;gap:10px}
+.drop p{margin:0;color:var(--muted);font-size:13px}
+.notice{border-radius:10px;padding:12px 14px;background:color-mix(in srgb,var(--warn) 12%,var(--bar));border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);font-size:13px}
+.guide{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;margin:0;font-size:14px}
+.guide dt{display:flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap}
+.guide dd{margin:0;color:var(--muted);min-width:0}
+@media (max-width:520px){.guide{grid-template-columns:1fr;gap:2px}.guide dd{margin-bottom:10px}}
+
+#veil{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);backdrop-filter:blur(2px);font-size:18px;font-weight:600;color:var(--ink);pointer-events:none}
+#veil span{background:var(--bar);padding:14px 22px;border-radius:12px;box-shadow:var(--shadow)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;z-index:60;max-width:calc(100% - 32px);
+  background:var(--ink);color:var(--bar);padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);transition:opacity .18s,transform .18s;pointer-events:none}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.err{background:var(--danger);color:#fff}
+.busy{cursor:progress}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body class="no-doc t-select">
+
+<header class="bar">
+  <div class="doc">
+    <b id="fname">PDF 필기장</b>
+    <span id="status" class="status">파일을 열어 주세요</span>
+  </div>
+
+  <div class="grp tools needs-doc" role="toolbar" aria-label="도구">
+    <button class="ib" data-tool="select" aria-pressed="true" title="선택 (V)"><svg viewBox="0 0 24 24"><path d="M6 3l13 7.5-6 1.6L10 18z"/></svg><span class="lbl">선택</span></button>
+    <button class="ib" data-tool="highlight" aria-pressed="false" title="형광펜 (H)"><svg viewBox="0 0 24 24"><path d="M15 4l5 5-8.5 8.5H7v-4.5z"/><path d="M3 21h10"/></svg><span class="lbl">형광펜</span></button>
+    <button class="ib" data-tool="underline" aria-pressed="false" title="밑줄 (U)"><svg viewBox="0 0 24 24"><path d="M7 4v6a5 5 0 0 0 10 0V4"/><path d="M5 20h14"/></svg><span class="lbl">밑줄</span></button>
+    <button class="ib" data-tool="ink" aria-pressed="false" title="펜 (P)"><svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.8L16 4.4l3.6 3.6L8.8 18.8z"/><path d="M13.8 6.6l3.6 3.6"/></svg><span class="lbl">펜</span></button>
+    <button class="ib" data-tool="note" aria-pressed="false" title="메모 (N)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/><path d="M8 9h8M8 12h5"/></svg><span class="lbl">메모</span></button>
+    <button class="ib" data-tool="erase" aria-pressed="false" title="지우개 (E)"><svg viewBox="0 0 24 24"><path d="M9 20h11"/><path d="M4.5 14.5l9-9a2 2 0 0 1 2.8 0l2.7 2.7a2 2 0 0 1 0 2.8L11 19H8.8z"/><path d="M9 10l5.5 5.5"/></svg><span class="lbl">지우개</span></button>
+  </div>
+
+  <div class="grp needs-doc" id="swatches" aria-label="색"></div>
+  <div class="grp needs-doc" id="widths" aria-label="펜 굵기" hidden></div>
+
+  <div class="grp needs-doc">
+    <button class="ib" id="undo" title="되돌리기 (Ctrl+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="ib" id="redo" title="다시 하기 (Ctrl+Shift+Z)" disabled><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  </div>
+
+  <div class="grp needs-doc" aria-label="보기 방식">
+    <button class="ib" data-view="single" aria-pressed="true" title="한 쪽씩 보기"><svg viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="1"/></svg></button>
+    <button class="ib" data-view="spread" aria-pressed="false" title="두 쪽씩 나란히 보기"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="8.5" height="14" rx="1"/><rect x="13" y="5" width="8.5" height="14" rx="1"/></svg></button>
+    <button class="ib" id="coverBtn" aria-pressed="false" title="첫 쪽은 혼자 두고 2-3, 4-5쪽처럼 책 펼친 모양으로 보기" hidden>표지 따로</button>
+  </div>
+
+  <div class="grp zoom needs-doc">
+    <button class="ib" id="zout" title="축소"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+    <button class="ib" id="zlabel" title="폭에 맞추기">맞춤</button>
+    <button class="ib" id="zin" title="확대"><svg viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></svg></button>
+    <span id="pageno"></span>
+  </div>
+
+  <button class="btn" id="openBtn" title="PDF 열기 (Ctrl+O)"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10V19H3z"/></svg>열기</button>
+  <button class="btn primary needs-doc" id="saveBtn" title="원본에 저장 (Ctrl+S)" disabled><svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3"/><path d="M8 21v-7h8v7"/></svg>저장</button>
+</header>
+
+<main id="desk">
+  <section id="empty">
+    <h1>PDF 필기장</h1>
+    <p class="lead">PDF를 열어 형광펜, 밑줄, 펜, 메모로 필기하세요. 저장을 누르면 새 파일을 만들지 않고 지금 열어 둔 원본 PDF에 필기가 그대로 들어가요.</p>
+
+    <div class="notice" id="fsNotice" hidden>이 브라우저는 원본 파일 덮어쓰기를 지원하지 않아요. 지금은 저장하면 같은 이름의 새 파일로 내려받아져요. Chrome이나 Edge에서 이 페이지를 열면 원본에 바로 저장돼요.</div>
+    <div class="notice" id="libNotice" hidden>PDF 엔진 파일을 불러오지 못했어요. 앱 폴더의 vendor 폴더가 index.html 옆에 그대로 있는지 확인해 주세요.</div>
+    <div class="notice" id="fileNotice" hidden>지금은 파일을 직접 열어서 쓰고 있어요. 이 방식에서는 앱 설치와 오프라인 사용이 안 되고, 일부 한글 PDF의 글자 선택이 안 될 수 있어요. 안내서대로 웹 주소로 열어 주세요.</div>
+
+    <div class="drop">
+      <div class="acts">
+        <button class="btn primary" id="openBtn2"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10V19H3z"/></svg>PDF 파일 열기</button>
+        <button class="btn" id="recentBtn" hidden></button>
+        <button class="btn" id="sampleBtn">예제 PDF로 써 보기</button>
+        <button class="btn" id="installBtn" hidden><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/></svg>앱으로 설치</button>
+      </div>
+      <p>PDF 파일을 이 창에 끌어다 놓아도 열려요.</p>
+    </div>
+
+    <dl class="guide">
+      <dt><kbd>H</kbd> 형광펜 · <kbd>U</kbd> 밑줄</dt>
+      <dd>글자를 드래그하면 그 줄을 따라 표시돼요. 글자가 인식되지 않은 곳은 빈 곳을 드래그해서 영역으로 표시하면 돼요.</dd>
+      <dt><kbd>P</kbd> 펜</dt>
+      <dd>자유롭게 쓰고 그려요. 색과 굵기를 고를 수 있어요.</dd>
+      <dt><kbd>N</kbd> 메모</dt>
+      <dd>누른 자리에 메모를 붙여요. 기본은 내용이 페이지에 펼쳐 보이는 메모지라 어떤 PDF 뷰어에서든 보여요. 메모는 끌어서 옮기고, 오른쪽 아래 모서리를 끌어 크기를 바꾸고, 눌러서 고칠 수 있어요. 크기를 바꿔도 글씨와 메모지의 비율은 그대로예요.</dd>
+      <dt><kbd>E</kbd> 지우개</dt>
+      <dd>표시를 누르거나 문질러서 지워요. 이 페이지에서 단 필기는 다시 열었을 때도 지우거나 고칠 수 있어요.</dd>
+      <dt>확대 · 두 쪽 보기</dt>
+      <dd>터치패드를 두 손가락으로 벌리거나 오므리면 확대·축소돼요. <kbd>Ctrl</kbd>+마우스 휠도 돼요. 위쪽의 두 쪽 버튼을 누르면 좌우로 나란히 보여요.</dd>
+      <dt><kbd>Ctrl</kbd>+<kbd>S</kbd> 저장</dt>
+      <dd>원본 파일에 덮어써요. 처음 저장할 때 브라우저가 파일 수정 권한을 한 번 물어봐요. <kbd>Ctrl</kbd>+<kbd>Z</kbd>로 되돌릴 수 있어요.</dd>
+    </dl>
+  </section>
+  <div id="viewer" hidden></div>
+</main>
+
+<div id="veil" hidden><span>놓으면 이 PDF가 열려요</span></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+
+<script src="vendor/pdfjs/pdf.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+const $ = s => document.querySelector(s);
+const SVGNS = 'http://www.w3.org/2000/svg';
+const PDFJS_BASE = new URL('vendor/pdfjs/', location.href).href;   // bundled with the app, works offline
+const MARK = 'pdfnote-';
+const FS_OK = typeof window.showOpenFilePicker === 'function';
+
+if (!window.pdfjsLib || !window.PDFLib) {
+  $('#libNotice').hidden = false;
+  $('#openBtn').disabled = $('#openBtn2').disabled = $('#sampleBtn').disabled = true;
+  return;
+}
+if (!FS_OK) $('#fsNotice').hidden = false;
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js';
+const { PDFDocument, PDFName, PDFArray, PDFDict, PDFString, PDFHexString, PDFNumber, PDFRef, PDFBool, StandardFonts } = PDFLib;
+
+const PALETTES = {
+  marker: [['#FFE066', '노랑'], ['#8CE99A', '연두'], ['#74C0FC', '하늘'], ['#F9A8C9', '분홍'], ['#FFC078', '주황']],
+  pen:    [['#E03131', '빨강'], ['#1C7ED6', '파랑'], ['#2F9E44', '초록'], ['#212529', '검정'], ['#7048E8', '보라']],
+};
+const TOOL_PALETTE = { highlight: 'marker', note: 'marker', underline: 'pen', ink: 'pen' };
+const WIDTHS = [[1.2, '가늘게'], [2.4, '보통'], [4.8, '굵게']];
+const ZOOMS = [0.25, 0.33, 0.4, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
+const ZMIN = 0.25, ZMAX = 5;
+
+const state = {
+  pdf: null, bytes: null, fileName: '', handle: null, writable: false,
+  pages: [], annots: [], savedJSON: '[]', undo: [], redo: [],
+  tool: 'select', zoom: 'fit', scale: 1, gen: 0,
+  color: { highlight: '#FFE066', underline: '#E03131', ink: '#1C7ED6', note: '#FFE066' },
+  inkWidth: 2.4, saving: false, loading: false,
+  view: 'single', cover: false, noteExpanded: true,
+};
+
+// remembered tool settings (per browser, optional)
+try {
+  const p = JSON.parse(localStorage.getItem('pdf-pilgi-prefs') || 'null');
+  if (p && p.color) Object.assign(state.color, p.color);
+  if (p && p.inkWidth) state.inkWidth = p.inkWidth;
+  if (p && (p.view === 'single' || p.view === 'spread')) state.view = p.view;
+  if (p && typeof p.cover === 'boolean') state.cover = p.cover;
+  if (p && typeof p.noteExpanded === 'boolean') state.noteExpanded = p.noteExpanded;
+} catch (e) {}
+function savePrefs() {
+  try { localStorage.setItem('pdf-pilgi-prefs', JSON.stringify({ color: state.color, inkWidth: state.inkWidth, view: state.view, cover: state.cover, noteExpanded: state.noteExpanded })); } catch (e) {}
+}
+
+/* ================= small helpers ================= */
+const r2 = n => Math.round(n * 100) / 100;
+const fmt = n => (Math.round(n * 100) / 100).toString();
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const newId = () => MARK + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+const rgbToHex = a => '#' + a.slice(0, 3).map(v => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+const snapshot = () => JSON.stringify(state.annots);
+function pdfDate(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `D:${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+function darker(hex, k = 0.55) { return rgbToHex(hexToRgb(hex).map(v => v * k)); }
+
+let toastTimer = 0;
+function toast(msg, kind) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'on' + (kind === 'err' ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = kind === 'err' ? 'err' : ''; }, kind === 'err' ? 5200 : 3000);
+}
+
+/* ================= recent file (IndexedDB keeps the file handle) ================= */
+const kv = {
+  db() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('pdf-pilgi', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async get(k) {
+    const db = await this.db();
+    return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  },
+  async set(k, v) {
+    const db = await this.db();
+    return new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  },
+};
+async function rememberHandle(h) { try { if (h) await kv.set('recent', h); showRecent(h); } catch (e) {} }
+function showRecent(h) {
+  const b = $('#recentBtn');
+  if (!h) { b.hidden = true; return; }
+  b.hidden = false;
+  b.textContent = '최근 파일 다시 열기: ' + h.name;
+  b.onclick = async () => {
+    try {
+      const opts = { mode: 'readwrite' };
+      if ((await h.queryPermission(opts)) !== 'granted' && (await h.requestPermission(opts)) !== 'granted') {
+        toast('파일을 열 권한을 받지 못했어요.', 'err'); return;
+      }
+      await openFromHandle(h);
+    } catch (e) {
+      toast(e.name === 'NotFoundError' ? '그 파일을 찾을 수 없어요. 옮겼거나 지운 것 같아요.' : '최근 파일을 열지 못했어요: ' + e.message, 'err');
+    }
+  };
+}
+if (FS_OK) kv.get('recent').then(showRecent).catch(() => {});
+
+/* ================= reading & writing our annotations with pdf-lib ================= */
+function deref(ctx, v) { return v instanceof PDFRef ? ctx.lookup(v) : v; }
+function nums(ctx, v) {
+  v = deref(ctx, v);
+  if (!(v instanceof PDFArray)) return null;
+  return v.asArray().map(x => { x = deref(ctx, x); return x instanceof PDFNumber ? x.asNumber() : 0; });
+}
+function textOf(v) { return (v instanceof PDFString || v instanceof PDFHexString) ? v.decodeText() : ''; }
+
+function readAnnot(ctx, dict, pageIndex, nm) {
+  const get = k => deref(ctx, dict.get(PDFName.of(k)));
+  const sub = get('Subtype');
+  const st = sub instanceof PDFName ? sub.asString() : '';
+  const c = nums(ctx, get('C'));
+  const id = /^pdfnote-[a-z0-9]+$/i.test(nm) ? nm : newId();
+  const base = { id, page: pageIndex };
+  if (st === '/Highlight' || st === '/Underline') {
+    const q = nums(ctx, get('QuadPoints'));
+    if (!q || q.length < 8) return null;
+    const quads = [];
+    for (let i = 0; i + 7 < q.length; i += 8) quads.push(q.slice(i, i + 8).map(r2));
+    const type = st === '/Highlight' ? 'highlight' : 'underline';
+    return { ...base, type, color: c && c.length >= 3 ? rgbToHex(c) : state.color[type], quads };
+  }
+  if (st === '/Ink') {
+    const L = get('InkList');
+    if (!(L instanceof PDFArray)) return null;
+    const ink = L.asArray().map(s => nums(ctx, s)).filter(s => s && s.length >= 2).map(s => s.map(r2));
+    if (!ink.length) return null;
+    let width = 1.5;
+    const bs = get('BS');
+    if (bs instanceof PDFDict) { const W = deref(ctx, bs.get(PDFName.of('W'))); if (W instanceof PDFNumber) width = W.asNumber(); }
+    return { ...base, type: 'ink', color: c && c.length >= 3 ? rgbToHex(c) : '#212529', width, ink };
+  }
+  if (st === '/Text' || st === '/FreeText') {
+    const R = nums(ctx, get('Rect')) || [0, 0, 0, 0];
+    const text = textOf(get('Contents'));
+    let size = 1;
+    if (st === '/FreeText') {
+      const k = get('PNSize');
+      size = k instanceof PDFNumber ? k.asNumber() : Math.abs(R[2] - R[0]) / cardLayout(text).wPt;
+    }
+    return { ...base, type: 'note', color: c && c.length >= 3 ? rgbToHex(c) : '#FFE066',
+      x: r2(Math.min(R[0], R[2])), y: r2(Math.max(R[1], R[3])), text, expanded: st === '/FreeText', size: r2(clamp(size || 1, NOTE_MIN, NOTE_MAX)) };
+  }
+  return null;
+}
+
+function dropObject(ctx, ref, dict) {
+  // remove an annotation we own, plus its appearance streams and popup, so files don't grow on every save
+  const dropStream = ref => {
+    const st = ctx.lookup(ref);
+    const res = st && st.dict ? deref(ctx, st.dict.get(PDFName.of('Resources'))) : null;
+    const xo = res instanceof PDFDict ? deref(ctx, res.get(PDFName.of('XObject'))) : null;
+    if (xo instanceof PDFDict) xo.values().forEach(x => { if (x instanceof PDFRef) ctx.delete(x); });
+    ctx.delete(ref);
+  };
+  const ap = deref(ctx, dict.get(PDFName.of('AP')));
+  if (ap instanceof PDFDict) {
+    for (const k of ['N', 'R', 'D']) {
+      const v = ap.get(PDFName.of(k));
+      if (v instanceof PDFRef) dropStream(v);
+      else if (v instanceof PDFDict) v.values().forEach(x => { if (x instanceof PDFRef) dropStream(x); });
+    }
+  }
+  const pop = dict.get(PDFName.of('Popup'));
+  if (pop instanceof PDFRef) ctx.delete(pop);
+  if (ref instanceof PDFRef) ctx.delete(ref);
+}
+
+// Pull every annotation this page made out of the document; returns them as editable objects.
+function extractManaged(doc) {
+  const ctx = doc.context;
+  const found = [];
+  doc.getPages().forEach((page, pi) => {
+    const arr = deref(ctx, page.node.get(PDFName.of('Annots')));
+    if (!(arr instanceof PDFArray)) return;
+    const entries = arr.asArray();
+    const keep = [];
+    const popupsToDrop = new Set();
+    for (const item of entries) {
+      const dict = deref(ctx, item);
+      if (!(dict instanceof PDFDict)) { keep.push(item); continue; }
+      const nm = textOf(deref(ctx, dict.get(PDFName.of('NM'))));
+      if (nm.startsWith(MARK)) {
+        const a = readAnnot(ctx, dict, pi, nm);
+        if (a) found.push(a);
+        const pop = dict.get(PDFName.of('Popup'));
+        if (pop instanceof PDFRef) popupsToDrop.add(pop.toString());
+        dropObject(ctx, item, dict);
+      } else keep.push(item);
+    }
+    if (keep.length !== entries.length) {
+      const left = keep.filter(x => !(x instanceof PDFRef && popupsToDrop.has(x.toString())));
+      page.node.set(PDFName.of('Annots'), ctx.obj(left));
+    }
+  });
+  return found;
+}
+
+/* A memo "card": the text drawn on canvas with the browser's Korean font, so every PDF viewer shows it as an image. */
+const NOTE_MIN = 0.5, NOTE_MAX = 4;
+const CARD = { maxW: 180, minW: 52, pad: 7, size: 9.5, lh: 1.45, px: 4 };   // sizes in PDF points; px = canvas pixels per point
+const CARD_FONT = '"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+let cardCache = new Map();
+if (document.fonts && document.fonts.load) {
+  document.fonts.load(`400 38px "IBM Plex Sans KR"`, '가A').then(() => { cardCache = new Map(); layoutCache = new Map(); if (state.pages.length) redrawAll(); }).catch(() => {});
+}
+function wrapText(ctx, text, maxW) {
+  const lines = [];
+  for (const para of text.split('\n')) {
+    let line = '';
+    for (const tok of para.split(/(\s+)/)) {
+      if (!tok) continue;
+      if (ctx.measureText(line + tok).width <= maxW) { line += tok; continue; }
+      if (/^\s+$/.test(tok)) { lines.push(line); line = ''; continue; }
+      if (line.trim()) { lines.push(line.trimEnd()); line = ''; }
+      for (const ch of tok) {
+        if (line && ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; }
+        else line += ch;
+      }
+    }
+    lines.push(line.trimEnd());
+  }
+  return lines;
+}
+// Layout (line breaks, card size in points) is computed once at a fixed density, so a memo keeps
+// exactly the same line breaks and text-to-paper ratio at every size; only the pixel density changes.
+const DENSITIES = [4, 6, 8, 12];
+const densityFor = pxPerPt => DENSITIES.find(d => d >= pxPerPt) || 12;
+let layoutCache = new Map();
+function cardLayout(text) {
+  if (layoutCache.has(text)) return layoutCache.get(text);
+  const S = CARD.px;
+  const g = document.createElement('canvas').getContext('2d');
+  g.font = `400 ${CARD.size * S}px ${CARD_FONT}`;
+  const lines = wrapText(g, text.trim() ? text.replace(/\s+$/, '') : '빈 메모', (CARD.maxW - CARD.pad * 2) * S);
+  const widest = Math.max(...lines.map(l => g.measureText(l).width));
+  const lh = CARD.size * CARD.lh;
+  const out = {
+    lines,
+    wPt: r2(clamp(widest / S + CARD.pad * 2 + 1, CARD.minW, CARD.maxW)),
+    hPt: r2(CARD.pad * 2 + lines.length * lh - (lh - CARD.size) * 0.5),
+  };
+  if (layoutCache.size > 300) layoutCache = new Map();
+  layoutCache.set(text, out);
+  return out;
+}
+function renderCard(text, color, density = CARD.px) {
+  const key = density + '\u0000' + color + '\u0000' + text;
+  if (cardCache.has(key)) return cardCache.get(key);
+  const L = cardLayout(text), D = density, lh = CARD.size * CARD.lh;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(L.wPt * D);
+  c.height = Math.ceil(L.hPt * D);
+  const g = c.getContext('2d');
+  const bw = 0.8 * D, rad = 2.5 * D;
+  g.beginPath();
+  g.roundRect(bw / 2, bw / 2, c.width - bw, c.height - bw, rad);
+  g.fillStyle = color; g.fill();
+  g.lineWidth = bw; g.strokeStyle = darker(color, 0.62); g.stroke();
+  g.font = `400 ${CARD.size * D}px ${CARD_FONT}`;
+  g.fillStyle = text.trim() ? '#1D1F22' : '#6B6F75';
+  g.textBaseline = 'alphabetic';
+  L.lines.forEach((l, i) => g.fillText(l, CARD.pad * D, (CARD.pad + i * lh + CARD.size * 0.92) * D));
+  const out = { url: c.toDataURL('image/png'), wPt: L.wPt, hPt: L.hPt };
+  if (cardCache.size > 300) cardCache = new Map();
+  cardCache.set(key, out);
+  return out;
+}
+function dataUrlBytes(url) {
+  const bin = atob(url.slice(url.indexOf(',') + 1));
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+function bbox(points, pad) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i + 1 < points.length; i += 2) {
+    x0 = Math.min(x0, points[i]); x1 = Math.max(x1, points[i]);
+    y0 = Math.min(y0, points[i + 1]); y1 = Math.max(y1, points[i + 1]);
+  }
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad].map(r2);
+}
+function underlineGeom(q) {
+  // q = [ULx,ULy, URx,URy, LLx,LLy, LRx,LRy]
+  const h = Math.hypot(q[0] - q[4], q[1] - q[5]) || 1;
+  const w = clamp(h * 0.07, 0.75, 2.5);
+  const ux = (q[0] - q[4]) / h, uy = (q[1] - q[5]) / h;
+  const off = w / 2 + h * 0.02;
+  return { w, x1: q[4] + ux * off, y1: q[5] + uy * off, x2: q[6] + ux * off, y2: q[7] + uy * off };
+}
+
+async function writeAnnots(doc, annots) {
+  const ctx = doc.context;
+  const pages = doc.getPages();
+  const now = pdfDate();
+  for (const a of annots) {
+    const page = pages[a.page];
+    if (!page) continue;
+    const [r, g, b] = hexToRgb(a.color);
+    const common = { Type: 'Annot', C: [r2(r), r2(g), r2(b)], NM: PDFString.of(a.id), M: PDFString.of(now), P: page.ref };
+    let dict;
+    if (a.type === 'highlight') {
+      const flat = a.quads.flat();
+      const rect = bbox(flat, 1);
+      let ops = `/GS0 gs ${fmt(r)} ${fmt(g)} ${fmt(b)} rg\n`;
+      for (const q of a.quads) ops += `${fmt(q[0])} ${fmt(q[1])} m ${fmt(q[2])} ${fmt(q[3])} l ${fmt(q[6])} ${fmt(q[7])} l ${fmt(q[4])} ${fmt(q[5])} l h f\n`;
+      const ap = ctx.register(ctx.stream(ops, { Type: 'XObject', Subtype: 'Form', BBox: rect,
+        Resources: { ExtGState: { GS0: { Type: 'ExtGState', BM: 'Multiply', CA: 1, ca: 1 } } } }));
+      dict = ctx.obj({ ...common, Subtype: 'Highlight', Rect: rect, QuadPoints: flat, CA: 1, F: 4, AP: { N: ap } });
+    } else if (a.type === 'underline') {
+      const flat = a.quads.flat();
+      const rect = bbox(flat, 3);
+      let ops = `${fmt(r)} ${fmt(g)} ${fmt(b)} RG 0 J\n`;
+      for (const q of a.quads) {
+        const u = underlineGeom(q);
+        ops += `${fmt(u.w)} w ${fmt(u.x1)} ${fmt(u.y1)} m ${fmt(u.x2)} ${fmt(u.y2)} l S\n`;
+      }
+      const ap = ctx.register(ctx.stream(ops, { Type: 'XObject', Subtype: 'Form', BBox: rect }));
+      dict = ctx.obj({ ...common, Subtype: 'Underline', Rect: rect, QuadPoints: flat, F: 4, AP: { N: ap } });
+    } else if (a.type === 'ink') {
+      const rect = bbox(a.ink.flat(), a.width + 1);
+      let ops = `${fmt(r)} ${fmt(g)} ${fmt(b)} RG ${fmt(a.width)} w 1 J 1 j\n`;
+      for (const s of a.ink) {
+        ops += `${fmt(s[0])} ${fmt(s[1])} m`;
+        if (s.length === 2) ops += ` ${fmt(s[0] + 0.01)} ${fmt(s[1])} l`;
+        for (let i = 2; i + 1 < s.length; i += 2) ops += ` ${fmt(s[i])} ${fmt(s[i + 1])} l`;
+        ops += ' S\n';
+      }
+      const ap = ctx.register(ctx.stream(ops, { Type: 'XObject', Subtype: 'Form', BBox: rect }));
+      dict = ctx.obj({ ...common, Subtype: 'Ink', Rect: rect, InkList: a.ink, BS: { Type: 'Border', W: a.width, S: 'S' }, F: 4, AP: { N: ap } });
+    } else if (a.type === 'note' && a.expanded) {
+      const k = a.size || 1;
+      const card = renderCard(a.text || '', a.color, densityFor(4 * k));
+      const img = await doc.embedPng(dataUrlBytes(card.url));
+      const w = r2(card.wPt * k), h = r2(card.hPt * k);
+      const rect = [a.x, r2(a.y - h), r2(a.x + w), a.y];
+      const ops = `q ${fmt(w)} 0 0 ${fmt(h)} ${fmt(rect[0])} ${fmt(rect[1])} cm /Im0 Do Q`;
+      const ap = ctx.register(ctx.stream(ops, { Type: 'XObject', Subtype: 'Form', BBox: rect, Resources: { XObject: { Im0: img.ref } } }));
+      dict = ctx.obj({ ...common, Subtype: 'FreeText', Rect: rect, Contents: PDFHexString.fromText(a.text || ''),
+        DA: PDFString.of('/Helv 9 Tf 0 g'), F: 4, AP: { N: ap }, PNSize: k });
+    } else if (a.type === 'note') {
+      const rect = [a.x, a.y - 20, a.x + 20, a.y].map(r2);
+      dict = ctx.obj({ ...common, Subtype: 'Text', Rect: rect, Contents: PDFHexString.fromText(a.text || ''), Name: 'Comment', F: 28, Open: PDFBool.False });
+    } else continue;
+    page.node.addAnnot(ctx.register(dict));
+  }
+}
+
+async function buildPdf() {
+  const doc = await PDFDocument.load(state.bytes, { updateMetadata: false });
+  extractManaged(doc);              // remove the previous version of our notes
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  await writeAnnots(doc, state.annots);   // write the current ones
+  return doc.save({ updateFieldAppearances: false });
+}
+
+/* ================= opening ================= */
+const desk = $('#desk'), viewer = $('#viewer');
+
+function confirmDiscard() {
+  return !isDirty() || window.confirm('저장하지 않은 필기가 있어요. 버리고 다른 파일을 열까요?');
+}
+
+async function pickAndOpen() {
+  if (state.loading || !confirmDiscard()) return;
+  if (FS_OK) {
+    try {
+      const [h] = await window.showOpenFilePicker({ types: [{ description: 'PDF 문서', accept: { 'application/pdf': ['.pdf'] } }], multiple: false });
+      await openFromHandle(h);
+    } catch (e) { if (e.name !== 'AbortError') toast('파일을 열지 못했어요: ' + e.message, 'err'); }
+  } else $('#fileInput').click();
+}
+async function openFromHandle(h) {
+  const f = await h.getFile();
+  await openBytes(new Uint8Array(await f.arrayBuffer()), f.name, h);
+  rememberHandle(h);
+}
+$('#fileInput').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) await openBytes(new Uint8Array(await f.arrayBuffer()), f.name, null);
+});
+
+async function openBytes(bytes, name, handle) {
+  closeNote(false);
+  state.loading = true;
+  document.body.classList.add('busy');
+  setStatus('여는 중…');
+  try {
+    let doc = null, writable = false, warn = '';
+    try { doc = await PDFDocument.load(bytes, { updateMetadata: false }); writable = true; }
+    catch (e) {
+      warn = /encrypt/i.test(e.message || '')
+        ? '보안이 걸린 PDF라서 필기를 저장할 수 없어요. 보기와 필기만 할 수 있어요.'
+        : '이 PDF는 구조를 읽지 못해서 저장할 수 없어요. 보기와 필기만 할 수 있어요.';
+    }
+    let annots = [], renderBytes = bytes;
+    if (doc) {
+      annots = extractManaged(doc);
+      if (annots.length) renderBytes = await doc.save({ updateFieldAppearances: false });
+    }
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: renderBytes.slice(), cMapUrl: PDFJS_BASE + 'cmaps/', cMapPacked: true,
+        standardFontDataUrl: PDFJS_BASE + 'standard_fonts/', isEvalSupported: false }).promise;
+    } catch (e) {
+      toast(e && e.name === 'PasswordException' ? '암호가 걸린 PDF는 열 수 없어요.' : 'PDF를 열지 못했어요: ' + (e && e.message), 'err');
+      refreshUi();
+      return;
+    }
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const p = await pdf.getPage(i);
+      pages.push({ i: i - 1, pdfPage: p, base: p.getViewport({ scale: 1 }) });
+    }
+    if (state.pdf) state.pdf.destroy();
+    Object.assign(state, { pdf, pages, bytes, fileName: name, handle, writable, annots, undo: [], redo: [], zoom: 'fit' });
+    state.savedJSON = snapshot();
+    document.body.classList.remove('no-doc');
+    $('#empty').hidden = true;
+    viewer.hidden = false;
+    $('#fname').textContent = name;
+    document.title = name + ' · PDF 필기장';
+    desk.scrollTop = 0; desk.scrollLeft = 0;
+    layout(false);
+    refreshUi();
+    if (warn) toast(warn, 'err');
+    else if (annots.length) toast(`이전에 단 필기 ${annots.length}개를 불러왔어요.`);
+  } finally {
+    state.loading = false;
+    document.body.classList.remove('busy');
+  }
+}
+
+/* ================= page layout & rendering ================= */
+let io = null;
+
+function fitScale() {
+  const W = desk.clientWidth - 48;
+  const maxW = Math.max(...state.pages.map(p => p.base.width));
+  if (state.view === 'spread') {
+    const maxH = Math.max(...state.pages.map(p => p.base.height));
+    const H = desk.clientHeight - 56;
+    return clamp(Math.min((W - 14) / (2 * maxW), H / maxH), 0.2, 4);
+  }
+  return clamp(W / maxW, 0.3, 4);
+}
+function groups() {
+  const n = state.pages.length, out = [];
+  if (state.view !== 'spread') { for (let i = 0; i < n; i++) out.push([i]); return out; }
+  let i = 0;
+  if (state.cover && n > 0) { out.push([0]); i = 1; }
+  for (; i < n; i += 2) out.push(i + 1 < n ? [i, i + 1] : [i]);
+  return out;
+}
+// which page is under a screen point, and where inside it (0..1)
+function pageAt(cx, cy) {
+  let best = null, bd = Infinity;
+  for (const pg of state.pages) {
+    if (!pg.el) continue;
+    const r = pg.el.getBoundingClientRect();
+    const dx = cx < r.left ? r.left - cx : cx > r.right ? cx - r.right : 0;
+    const dy = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0;
+    if (dx + dy < bd) { bd = dx + dy; best = { i: pg.i, fx: (cx - r.left) / r.width, fy: (cy - r.top) / r.height }; }
+    if (bd === 0) break;
+  }
+  return best;
+}
+function keepPoint(focus, cx, cy) {
+  // after a re-layout, scroll so the same spot of the same page sits under (cx, cy) again
+  if (!focus) return;
+  const el = state.pages[focus.i].el, dr = desk.getBoundingClientRect();
+  desk.scrollLeft = el.offsetLeft + focus.fx * el.offsetWidth - (cx - dr.left);
+  desk.scrollTop = el.offsetTop + focus.fy * el.offsetHeight - (cy - dr.top);
+}
+function viewCenter() {
+  const dr = desk.getBoundingClientRect();
+  return [dr.left + desk.clientWidth / 2, dr.top + desk.clientHeight / 2];
+}
+function layout(keep = true) {
+  let focus = null, cx = 0, cy = 0;
+  if (keep && state.pages.length && state.pages[0].el) {
+    const dr = desk.getBoundingClientRect();
+    cx = dr.left + desk.clientWidth / 2; cy = dr.top + 4;
+    focus = pageAt(cx, cy);
+  }
+  build();
+  if (focus) keepPoint(focus, cx, cy);
+  updatePageNo();
+}
+function build() {
+  closeNote(true);
+  state.gen++;
+  if (io) io.disconnect();
+  viewer.style.transform = '';
+  viewer.classList.remove('pinching');
+  state.scale = state.zoom === 'fit' ? fitScale() : state.zoom;
+  viewer.textContent = '';
+  const frag = document.createDocumentFragment();
+  for (const grp of groups()) {
+    const row = document.createElement('div');
+    row.className = 'spread';
+    for (const k of grp) {
+      const pg = state.pages[k];
+      cancelRender(pg);
+      pg.vp = pg.pdfPage.getViewport({ scale: state.scale });
+      const el = document.createElement('div');
+      el.className = 'page';
+      el.dataset.i = pg.i;
+      el.style.width = pg.vp.width + 'px';
+      el.style.height = pg.vp.height + 'px';
+      el.style.setProperty('--scale-factor', pg.vp.scale);
+      el.innerHTML = `<canvas></canvas><svg class="ann" xmlns="${SVGNS}" viewBox="0 0 ${pg.vp.width} ${pg.vp.height}"></svg>` +
+        `<div class="textLayer"></div><div class="draw"></div><div class="notes"></div><span class="pnum">${pg.i + 1}</span>`;
+      Object.assign(pg, { el, canvas: el.children[0], svg: el.children[1], text: el.children[2], draw: el.children[3], notes: el.children[4], rendered: false, row: grp });
+      row.appendChild(el);
+      drawAnnots(pg);
+    }
+    frag.appendChild(row);
+  }
+  viewer.appendChild(frag);
+  io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const pg = state.pages[+e.target.dataset.i];
+      if (e.isIntersecting) renderPage(pg); else releasePage(pg);
+    }
+  }, { root: desk, rootMargin: '1200px 600px' });
+  state.pages.forEach(pg => io.observe(pg.el));
+  $('#zlabel').textContent = state.zoom === 'fit' ? '맞춤' : Math.round(state.scale * 100) + '%';
+  $('#zlabel').title = state.zoom === 'fit' ? `화면에 맞춤 (${Math.round(state.scale * 100)}%)` : '화면에 맞추기';
+}
+function cancelRender(pg) {
+  if (pg.task) { try { pg.task.cancel(); } catch (e) {} pg.task = null; }
+}
+function releasePage(pg) {
+  cancelRender(pg);
+  if (!pg.rendered) return;
+  pg.canvas.width = pg.canvas.height = 0;
+  pg.text.textContent = '';
+  pg.rendered = false;
+}
+async function renderPage(pg) {
+  if (pg.rendered || pg.task) return;
+  const gen = state.gen, vp = pg.vp;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const c = pg.canvas;
+  c.width = Math.floor(vp.width * dpr);
+  c.height = Math.floor(vp.height * dpr);
+  c.style.width = vp.width + 'px';
+  c.style.height = vp.height + 'px';
+  const task = pg.pdfPage.render({ canvasContext: c.getContext('2d'), viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null });
+  pg.task = task;
+  try {
+    await task.promise;
+    if (gen !== state.gen) return;
+    const tc = await pg.pdfPage.getTextContent();
+    if (gen !== state.gen) return;
+    pg.text.textContent = '';
+    await pdfjsLib.renderTextLayer({ textContentSource: tc, container: pg.text, viewport: vp, textDivs: [] }).promise;
+    if (gen !== state.gen) return;
+    const eoc = document.createElement('div');
+    eoc.className = 'endOfContent';
+    pg.text.appendChild(eoc);
+    pg.rendered = true;
+  } catch (e) {
+    if (!e || e.name !== 'RenderingCancelledException') console.error(e);
+  } finally {
+    if (pg.task === task) pg.task = null;
+  }
+}
+
+function updatePageNo() {
+  if (!state.pages.length) { $('#pageno').textContent = ''; return; }
+  const mid = desk.scrollTop + desk.clientHeight * 0.35;
+  let cur = state.pages[0];
+  for (const pg of state.pages) { if (pg.el && pg.el.offsetTop <= mid) cur = pg; else break; }
+  const grp = cur.row || [cur.i];
+  const label = grp.length > 1 ? `${grp[0] + 1}–${grp[grp.length - 1] + 1}` : `${grp[0] + 1}`;
+  $('#pageno').textContent = `${label} / ${state.pages.length}`;
+}
+let scrollRaf = 0;
+desk.addEventListener('scroll', () => { if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; updatePageNo(); }); }, { passive: true });
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  if (!state.pages.length || state.zoom !== 'fit') return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (Math.abs(fitScale() - state.scale) > 0.005) layout(); }, 160);
+});
+
+/* ================= drawing the overlay ================= */
+function vpPts(vp, flat) {
+  const out = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push(vp.convertToViewportPoint(flat[i], flat[i + 1]));
+  return out;
+}
+function drawAnnots(pg) {
+  if (!pg || !pg.el) return;
+  const vp = pg.vp, s = vp.scale;
+  let html = '';
+  pg.notes.textContent = '';
+  for (const a of state.annots) {
+    if (a.page !== pg.i) continue;
+    if (a.type === 'highlight') {
+      for (const q of a.quads) {
+        const p = vpPts(vp, q);
+        html += `<polygon class="hl" data-id="${a.id}" fill="${a.color}" points="${[p[0], p[1], p[3], p[2]].map(x => x.map(r2).join(',')).join(' ')}"/>`;
+      }
+    } else if (a.type === 'underline') {
+      for (const q of a.quads) {
+        const u = underlineGeom(q);
+        const [x1, y1] = vp.convertToViewportPoint(u.x1, u.y1), [x2, y2] = vp.convertToViewportPoint(u.x2, u.y2);
+        const line = `x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"`;
+        html += `<line data-id="${a.id}" ${line} stroke="${a.color}" stroke-width="${r2(u.w * s)}"/>`;
+        html += `<line data-id="${a.id}" ${line} stroke="transparent" stroke-width="12"/>`;
+      }
+    } else if (a.type === 'ink') {
+      for (const st of a.ink) {
+        let pts = vpPts(vp, st);
+        if (pts.length === 1) pts = [pts[0], [pts[0][0] + 0.01, pts[0][1]]];
+        const P = pts.map(x => x.map(r2).join(',')).join(' ');
+        html += `<polyline data-id="${a.id}" points="${P}" fill="none" stroke="${a.color}" stroke-width="${r2(a.width * s)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+        html += `<polyline data-id="${a.id}" points="${P}" fill="none" stroke="transparent" stroke-width="${Math.max(12, r2(a.width * s + 8))}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      }
+    } else if (a.type === 'note') {
+      pg.notes.appendChild(noteEl(a, vp));
+    }
+  }
+  pg.svg.innerHTML = html;
+}
+function noteEl(a, vp) {
+  const [x, y] = vp.convertToViewportPoint(a.x, a.y);
+  const b = document.createElement('button');
+  b.className = 'note-btn' + (a.expanded ? ' card' : '');
+  b.dataset.id = a.id;
+  b.style.left = x + 'px';
+  b.style.top = y + 'px';
+  b.title = a.expanded ? '눌러서 고치기 · 끌어서 옮기기 · 오른쪽 아래 모서리를 끌어 크기 조절' : (a.text || '빈 메모');
+  b.setAttribute('aria-label', '메모: ' + (a.text || '비어 있음'));
+  if (a.expanded) {
+    const k = a.size || 1;
+    const card = renderCard(a.text || '', a.color, densityFor(vp.scale * k * Math.min(window.devicePixelRatio || 1, 3)));
+    b.style.width = r2(card.wPt * k * vp.scale) + 'px';
+    const img = document.createElement('img');
+    img.src = card.url;
+    img.alt = '';
+    img.draggable = false;
+    b.appendChild(img);
+    const rs = document.createElement('span');
+    rs.className = 'rs';
+    rs.setAttribute('aria-hidden', 'true');
+    b.appendChild(rs);
+  } else {
+    b.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 3.5h18v13H10l-5 4.5v-4.5H3z" fill="${a.color}" stroke="${darker(a.color)}" stroke-width="1.3" stroke-linejoin="round"/><path d="M7 8h10M7 11.5h6.5" stroke="${darker(a.color, .45)}" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+  }
+  return b;
+}
+function refreshNote(a) {
+  const pg = state.pages[a.page];
+  const old = pg && pg.notes && pg.notes.querySelector(`[data-id="${a.id}"]`);
+  if (old) old.replaceWith(noteEl(a, pg.vp));
+}
+function redrawAll() { state.pages.forEach(drawAnnots); }
+function findAnnot(id) { return state.annots.find(a => a.id === id); }
+function addAnnot(a) {
+  a.id = newId();
+  state.annots.push(a);
+  drawAnnots(state.pages[a.page]);
+  return a;
+}
+function removeAnnot(id) {
+  const a = findAnnot(id);
+  if (!a) return false;
+  state.annots = state.annots.filter(x => x.id !== id);
+  drawAnnots(state.pages[a.page]);
+  return true;
+}
+
+/* ================= undo / dirty ================= */
+function pushUndo() {
+  state.undo.push(snapshot());
+  if (state.undo.length > 300) state.undo.shift();
+  state.redo = [];
+}
+function undo() {
+  closeNote(false);
+  if (!state.undo.length) return;
+  state.redo.push(snapshot());
+  state.annots = JSON.parse(state.undo.pop());
+  redrawAll(); refreshUi();
+}
+function redo() {
+  closeNote(false);
+  if (!state.redo.length) return;
+  state.undo.push(snapshot());
+  state.annots = JSON.parse(state.redo.pop());
+  redrawAll(); refreshUi();
+}
+function isDirty() { return !!state.pdf && snapshot() !== state.savedJSON; }
+function setStatus(t, cls) { const s = $('#status'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : ''); }
+function refreshUi() {
+  $('#undo').disabled = !state.undo.length;
+  $('#redo').disabled = !state.redo.length;
+  if (!state.pdf) { setStatus('파일을 열어 주세요'); return; }
+  const dirty = isDirty();
+  $('#saveBtn').disabled = !dirty || state.saving || !state.writable;
+  document.title = (dirty ? '• ' : '') + state.fileName + ' · PDF 필기장';
+  if (state.saving) setStatus('저장 중…');
+  else if (!state.writable) setStatus('저장할 수 없는 PDF', 'err');
+  else if (dirty) setStatus('저장하지 않은 필기 있음', 'dirty');
+  else setStatus(state.savedAt ? `원본에 저장됨 · ${state.savedAt}` : (state.handle ? '원본 파일과 연결됨' : '저장하면 새 파일로 받아요'));
+}
+window.addEventListener('beforeunload', e => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ================= saving ================= */
+async function save() {
+  if (!state.pdf || state.saving) return;
+  if (!state.writable) { toast('이 PDF는 저장할 수 없어요.', 'err'); return; }
+  closeNote(false);
+  state.saving = true; refreshUi();
+  try {
+    const out = await buildPdf();
+    let where;
+    if (state.handle) {
+      const opts = { mode: 'readwrite' };
+      if ((await state.handle.queryPermission(opts)) !== 'granted' && (await state.handle.requestPermission(opts)) !== 'granted') {
+        throw Object.assign(new Error('파일을 수정할 권한을 받지 못했어요. 저장을 다시 누르고 허용해 주세요.'), { name: 'PermissionError' });
+      }
+      const w = await state.handle.createWritable();
+      await w.write(out);
+      await w.close();
+      where = '원본 파일에 저장했어요.';
+    } else if (typeof window.showSaveFilePicker === 'function') {
+      const h = await window.showSaveFilePicker({ suggestedName: state.fileName, types: [{ description: 'PDF 문서', accept: { 'application/pdf': ['.pdf'] } }] });
+      const w = await h.createWritable();
+      await w.write(out);
+      await w.close();
+      state.handle = h;
+      state.fileName = h.name;
+      $('#fname').textContent = h.name;
+      rememberHandle(h);
+      where = '저장했어요. 이제부터는 이 파일에 바로 저장돼요.';
+    } else {
+      const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = state.fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      where = '이 브라우저는 원본 덮어쓰기가 안 돼서 새 파일로 내려받았어요.';
+    }
+    state.bytes = out;
+    state.savedJSON = snapshot();
+    const d = new Date();
+    state.savedAt = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    toast(where);
+  } catch (e) {
+    if (e.name !== 'AbortError') toast(e.name === 'PermissionError' ? e.message : '저장하지 못했어요: ' + e.message, 'err');
+  } finally {
+    state.saving = false;
+    refreshUi();
+  }
+}
+
+/* ================= tools ================= */
+function setTool(t) {
+  state.tool = t;
+  document.body.className = document.body.className.replace(/\bt-\w+/g, '').trim() + ' t-' + t;
+  document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+  renderSwatches();
+  if ((t === 'highlight' || t === 'underline') && state.pdf) applySelection(t);
+}
+function renderSwatches() {
+  const box = $('#swatches'), wbox = $('#widths');
+  const pal = TOOL_PALETTE[state.tool];
+  box.textContent = '';
+  box.hidden = !pal;
+  if (pal) {
+    for (const [hex, name] of PALETTES[pal]) {
+      const b = document.createElement('button');
+      b.className = 'sw';
+      b.style.background = hex;
+      b.title = name;
+      b.setAttribute('aria-label', name);
+      b.setAttribute('aria-pressed', String(state.color[state.tool].toLowerCase() === hex.toLowerCase()));
+      b.onclick = () => { state.color[state.tool] = hex; savePrefs(); renderSwatches(); };
+      box.appendChild(b);
+    }
+  }
+  wbox.hidden = state.tool !== 'ink';
+  wbox.textContent = '';
+  WIDTHS.forEach(([w, name], k) => {
+    const b = document.createElement('button');
+    b.className = 'ib wd';
+    b.title = name;
+    b.setAttribute('aria-label', '굵기 ' + name);
+    b.setAttribute('aria-pressed', String(Math.abs(state.inkWidth - w) < 0.01));
+    b.innerHTML = `<i style="height:${[2, 3.5, 6][k]}px"></i>`;
+    b.onclick = () => { state.inkWidth = w; savePrefs(); renderSwatches(); };
+    wbox.appendChild(b);
+  });
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+
+function localPoint(pg, e) {
+  const r = pg.el.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+function rectToQuad(vp, l, t, r, b) {
+  const ul = vp.convertToPdfPoint(l, t), ur = vp.convertToPdfPoint(r, t), ll = vp.convertToPdfPoint(l, b), lr = vp.convertToPdfPoint(r, b);
+  return [...ul, ...ur, ...ll, ...lr].map(r2);
+}
+function mergeRects(rs) {
+  rs.sort((a, b) => a.t - b.t || a.l - b.l);
+  const lines = [];
+  for (const r of rs) {
+    const h = r.b - r.t;
+    let line = null;
+    for (const L of lines) {
+      const ov = Math.min(L.b, r.b) - Math.max(L.t, r.t);
+      if (ov > 0.5 * Math.min(h, L.b - L.t)) { line = L; break; }
+    }
+    if (line) { line.items.push(r); line.t = Math.min(line.t, r.t); line.b = Math.max(line.b, r.b); }
+    else lines.push({ t: r.t, b: r.b, items: [r] });
+  }
+  const out = [];
+  for (const L of lines) {
+    L.items.sort((a, b) => a.l - b.l);
+    const gap = (L.b - L.t) * 0.6;
+    let cur = null;
+    for (const r of L.items) {
+      if (cur && r.l <= cur.r + gap) cur.r = Math.max(cur.r, r.r);
+      else { if (cur) out.push(cur); cur = { l: r.l, r: r.r, t: L.t, b: L.b }; }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+// Turn the current text selection into highlight / underline marks (works across pages).
+function applySelection(type) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  const rects = [];
+  for (let k = 0; k < sel.rangeCount; k++) for (const r of sel.getRangeAt(k).getClientRects()) rects.push(r);
+  const perPage = [];
+  for (const pg of state.pages) {
+    if (!pg.rendered) continue;
+    const pr = pg.el.getBoundingClientRect();
+    const list = [];
+    for (const r of rects) {
+      if (r.width < 1 || r.height < 1 || r.height > pr.height * 0.4) continue;
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      if (cx < pr.left || cx > pr.right || cy < pr.top || cy > pr.bottom) continue;
+      list.push({ l: Math.max(0, r.left - pr.left), t: Math.max(0, r.top - pr.top), r: Math.min(pr.width, r.right - pr.left), b: Math.min(pr.height, r.bottom - pr.top) });
+    }
+    if (list.length) perPage.push([pg, list]);
+  }
+  if (!perPage.length) return false;
+  pushUndo();
+  for (const [pg, list] of perPage) {
+    const quads = mergeRects(list).map(x => rectToQuad(pg.vp, x.l, x.t, x.r, x.b));
+    addAnnot({ type, page: pg.i, color: state.color[type], quads });
+  }
+  sel.removeAllRanges();
+  refreshUi();
+  return true;
+}
+
+function startRect(e, pg, type) {
+  e.preventDefault();
+  window.getSelection().removeAllRanges();
+  const [x0, y0] = localPoint(pg, e);
+  const tmp = document.createElementNS(SVGNS, 'rect');
+  tmp.setAttribute('class', 'tmp-rect');
+  pg.svg.appendChild(tmp);
+  let box = { l: x0, t: y0, r: x0, b: y0 };
+  try { pg.el.setPointerCapture(e.pointerId); } catch (err) {}
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const [x, y] = localPoint(pg, ev);
+    box = { l: clamp(Math.min(x0, x), 0, pg.vp.width), t: clamp(Math.min(y0, y), 0, pg.vp.height), r: clamp(Math.max(x0, x), 0, pg.vp.width), b: clamp(Math.max(y0, y), 0, pg.vp.height) };
+    tmp.setAttribute('x', box.l); tmp.setAttribute('y', box.t);
+    tmp.setAttribute('width', box.r - box.l); tmp.setAttribute('height', box.b - box.t);
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    pg.el.removeEventListener('pointermove', move);
+    pg.el.removeEventListener('pointerup', up);
+    pg.el.removeEventListener('pointercancel', up);
+    tmp.remove();
+    if (ev.type === 'pointercancel' || box.r - box.l < 4 || box.b - box.t < 4) return;
+    pushUndo();
+    addAnnot({ type, page: pg.i, color: state.color[type], quads: [rectToQuad(pg.vp, box.l, box.t, box.r, box.b)] });
+    refreshUi();
+  };
+  pg.el.addEventListener('pointermove', move);
+  pg.el.addEventListener('pointerup', up);
+  pg.el.addEventListener('pointercancel', up);
+}
+
+function startInk(e, pg) {
+  e.preventDefault();
+  const color = state.color.ink, width = state.inkWidth;
+  const pts = [localPoint(pg, e)];
+  const tmp = document.createElementNS(SVGNS, 'polyline');
+  tmp.setAttribute('fill', 'none');
+  tmp.setAttribute('stroke', color);
+  tmp.setAttribute('stroke-width', width * state.scale);
+  tmp.setAttribute('stroke-linecap', 'round');
+  tmp.setAttribute('stroke-linejoin', 'round');
+  pg.svg.appendChild(tmp);
+  const paint = () => tmp.setAttribute('points', (pts.length === 1 ? [pts[0], [pts[0][0] + 0.01, pts[0][1]]] : pts).map(p => p.map(r2).join(',')).join(' '));
+  paint();
+  try { pg.el.setPointerCapture(e.pointerId); } catch (err) {}
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const evs = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [ev];
+    for (const c of (evs.length ? evs : [ev])) {
+      const p = localPoint(pg, c), last = pts[pts.length - 1];
+      if (Math.hypot(p[0] - last[0], p[1] - last[1]) >= 1.2) pts.push(p);
+    }
+    paint();
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    pg.el.removeEventListener('pointermove', move);
+    pg.el.removeEventListener('pointerup', up);
+    pg.el.removeEventListener('pointercancel', up);
+    tmp.remove();
+    if (ev.type === 'pointercancel') return;
+    const flat = pts.flatMap(p => pg.vp.convertToPdfPoint(p[0], p[1])).map(r2);
+    pushUndo();
+    addAnnot({ type: 'ink', page: pg.i, color, width, ink: [flat] });
+    refreshUi();
+  };
+  pg.el.addEventListener('pointermove', move);
+  pg.el.addEventListener('pointerup', up);
+  pg.el.addEventListener('pointercancel', up);
+}
+
+function startErase(e) {
+  e.preventDefault();
+  const before = snapshot();
+  let changed = false;
+  const hit = ev => {
+    for (const el of document.elementsFromPoint(ev.clientX, ev.clientY)) {
+      const host = el.closest ? el.closest('[data-id]') : null;
+      if (host && host.dataset.id && removeAnnot(host.dataset.id)) changed = true;
+    }
+  };
+  hit(e);
+  const move = ev => { if (ev.pointerId === e.pointerId) hit(ev); };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    if (changed) { state.undo.push(before); state.redo = []; refreshUi(); }
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+
+viewer.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const pageEl = e.target.closest('.page');
+  if (!pageEl || e.target.closest('.note-pop')) return;
+  const pg = state.pages[+pageEl.dataset.i];
+  const t = state.tool;
+  if (t === 'erase') return startErase(e);
+  const nb = e.target.closest('.note-btn');
+  if (nb && e.target.closest('.rs')) return startNoteResize(e, pg, nb);
+  if (nb) return startNoteDrag(e, pg, nb);
+  if (t === 'ink') return startInk(e, pg);
+  if (t === 'note') {
+    e.preventDefault();
+    const [x, y] = localPoint(pg, e);
+    const [px, py] = pg.vp.convertToPdfPoint(x - 4, y - 4);
+    pushUndo();
+    const a = addAnnot({ type: 'note', page: pg.i, color: state.color.note, x: r2(px), y: r2(py), text: '', expanded: state.noteExpanded, size: 1 });
+    openNote(a.id, true);
+    refreshUi();
+    return;
+  }
+  const onText = e.target.closest('.textLayer span');
+  if (t === 'highlight' || t === 'underline') {
+    if (onText) { pg.text.classList.add('selecting'); state.pendingSelect = t; }
+    else startRect(e, pg, t);
+    return;
+  }
+  if (onText || e.target.closest('.textLayer')) pg.text.classList.add('selecting');
+});
+document.addEventListener('pointerup', () => {
+  document.querySelectorAll('.textLayer.selecting').forEach(x => x.classList.remove('selecting'));
+  if (state.pendingSelect) {
+    const t = state.pendingSelect;
+    state.pendingSelect = null;
+    if (state.tool === t) setTimeout(() => applySelection(t), 0);
+  }
+});
+// keyboard users: Enter / Space on a focused memo opens it (mouse and touch go through startNoteDrag)
+viewer.addEventListener('click', e => {
+  const b = e.target.closest('.note-btn');
+  if (b && e.detail === 0 && state.tool !== 'erase') openNote(b.dataset.id, false);
+});
+// Resize from the bottom-right grip: the whole memo scales as one, so text and paper keep their proportions.
+function startNoteResize(e, pg, btn) {
+  e.preventDefault();
+  e.stopPropagation();
+  const a = findAnnot(btn.dataset.id);
+  if (!a) return;
+  closeNote(false);
+  btn = pg.notes.querySelector(`[data-id="${a.id}"]`) || btn;
+  const before = snapshot();
+  const k0 = a.size || 1;
+  const w0 = btn.offsetWidth, h0 = btn.offsetHeight;
+  const sx = e.clientX, sy = e.clientY;
+  const [ax, ay] = pg.vp.convertToViewportPoint(a.x, a.y);
+  const kMax = Math.min(NOTE_MAX, k0 * (pg.vp.width - ax) / w0, k0 * (pg.vp.height - ay) / h0);
+  let k = k0;
+  btn.classList.add('resizing');
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const dx = ev.clientX - sx, dy = ev.clientY - sy;
+    // project the pointer movement onto the card's diagonal so dragging feels natural in any direction
+    const f = 1 + (dx * w0 + dy * h0) / (w0 * w0 + h0 * h0);
+    k = r2(clamp(k0 * f, NOTE_MIN, Math.max(NOTE_MIN, kMax)));
+    btn.style.width = r2(w0 * k / k0) + 'px';
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    btn.classList.remove('resizing');
+    if (ev.type === 'pointercancel') k = k0;
+    a.size = k;
+    if (snapshot() !== before) { state.undo.push(before); state.redo = []; }
+    refreshNote(a);   // redraw at a pixel density that suits the new size
+    refreshUi();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+function startNoteDrag(e, pg, btn) {
+  e.preventDefault();
+  const a = findAnnot(btn.dataset.id);
+  if (!a) return;
+  const before = snapshot();
+  const [ax, ay] = pg.vp.convertToViewportPoint(a.x, a.y);
+  const sx = e.clientX, sy = e.clientY;
+  let moved = false;
+  const live = () => pg.notes.querySelector(`[data-id="${a.id}"]`) || btn;
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const dx = ev.clientX - sx, dy = ev.clientY - sy;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved) { moved = true; closeNote(false); }
+    btn = live();
+    btn.classList.add('dragging');
+    const nx = clamp(ax + dx, 0, pg.vp.width - 12), ny = clamp(ay + dy, 0, pg.vp.height - 12);
+    btn.style.left = nx + 'px';
+    btn.style.top = ny + 'px';
+    const [px, py] = pg.vp.convertToPdfPoint(nx, ny);
+    a.x = r2(px); a.y = r2(py);
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    live().classList.remove('dragging');
+    if (moved) {
+      if (snapshot() !== before) { state.undo.push(before); state.redo = []; }
+      refreshUi();
+    } else if (ev.type === 'pointerup') openNote(a.id, false);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+
+/* ================= note editor ================= */
+let pop = null;
+function openNote(id, isNew) {
+  closeNote(false);
+  const a = findAnnot(id);
+  if (!a) return;
+  const pg = state.pages[a.page];
+  const [vx, vy] = pg.vp.convertToViewportPoint(a.x, a.y);
+  const el = document.createElement('div');
+  el.className = 'note-pop';
+  el.innerHTML = '<textarea id="noteText" rows="4" placeholder="메모를 입력하세요"></textarea>' +
+    '<div class="seg" role="group" aria-label="PDF에 보이는 방식"><button type="button" data-x="1">페이지에 펼쳐 보이기</button><button type="button" data-x="0">아이콘으로 접기</button></div>' +
+    '<p class="tip" hidden>아이콘 메모는 Chrome·웨일 같은 브라우저 PDF 뷰어에서 눌러도 한글이 보이지 않아요. Acrobat, 엣지, 맥 미리보기, 휴대폰 PDF 앱에서는 보여요.</p>' +
+    '<div class="row"><button type="button" class="del">삭제</button><span>Esc 닫기</span><button type="button" class="done">완료</button></div>';
+  const noteBtn = pg.notes.querySelector(`[data-id="${a.id}"]`);
+  const nw = noteBtn ? noteBtn.offsetWidth : 24;
+  const width = Math.min(260, pg.vp.width - 16);
+  let left = vx + nw + 10, top = vy;
+  if (left + width > pg.vp.width - 8) { left = vx; top = vy + (noteBtn ? noteBtn.offsetHeight : 24) + 8; }
+  el.style.left = clamp(left, 8, Math.max(8, pg.vp.width - width - 8)) + 'px';
+  el.style.top = clamp(top, 8, Math.max(8, pg.vp.height - 240)) + 'px';
+  pg.el.appendChild(el);
+  const ta = el.querySelector('textarea');
+  ta.value = a.text;
+  pop = { el, id, isNew, before: isNew ? null : snapshot(), original: a.text, origExpanded: !!a.expanded };
+  const syncSeg = () => {
+    el.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.x === '1') === !!a.expanded)));
+    el.querySelector('.tip').hidden = !!a.expanded;
+  };
+  syncSeg();
+  el.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+    a.expanded = b.dataset.x === '1';
+    state.noteExpanded = a.expanded;
+    savePrefs();
+    syncSeg();
+    refreshNote(a);
+    refreshUi();
+    ta.focus();
+  });
+  ta.addEventListener('input', () => {
+    a.text = ta.value;
+    clearTimeout(pop.t);
+    pop.t = setTimeout(() => refreshNote(a), a.expanded ? 120 : 0);
+    refreshUi();
+  });
+  ta.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') { ev.preventDefault(); closeNote(false); }
+    if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); closeNote(false); }
+  });
+  el.querySelector('.done').onclick = () => closeNote(false);
+  el.querySelector('.del').onclick = () => {
+    const p = pop;
+    pop.el.remove(); pop = null;
+    if (p.isNew) state.undo.pop(); else { state.undo.push(p.before); state.redo = []; }
+    removeAnnot(p.id);
+    refreshUi();
+  };
+  setTimeout(() => ta.focus(), 0);
+}
+function closeNote(silent) {
+  if (!pop) return;
+  const p = pop;
+  pop = null;
+  clearTimeout(p.t);
+  p.el.remove();
+  const a = findAnnot(p.id);
+  if (a && p.isNew && !a.text.trim()) { state.undo.pop(); removeAnnot(a.id); }
+  else if (a && !p.isNew && (a.text !== p.original || !!a.expanded !== p.origExpanded)) { state.undo.push(p.before); state.redo = []; }
+  if (a && findAnnot(a.id)) refreshNote(a);
+  if (!silent) refreshUi();
+}
+document.addEventListener('pointerdown', e => {
+  if (pop && !pop.el.contains(e.target) && !e.target.closest('.note-btn')) closeNote(false);
+}, true);
+
+/* ================= zoom ================= */
+function zoomTo(scale, cx, cy, focus) {
+  if (!state.pdf) return;
+  if (cx == null) [cx, cy] = viewCenter();
+  if (!focus) focus = pageAt(cx, cy);
+  state.zoom = r2(clamp(scale, ZMIN, ZMAX));
+  build();
+  keepPoint(focus, cx, cy);
+  updatePageNo();
+}
+function zoomStep(dir) {
+  const cur = state.scale;
+  zoomTo(dir > 0 ? (ZOOMS.find(z => z > cur + 0.01) || ZMAX) : ([...ZOOMS].reverse().find(z => z < cur - 0.01) || ZMIN));
+}
+function zoomFit() {
+  if (!state.pdf) return;
+  const [cx, cy] = viewCenter();
+  const focus = pageAt(cx, cy);
+  state.zoom = 'fit';
+  build();
+  if (focus) {
+    const el = state.pages[focus.i].el;
+    // land on the start of that row so a fitted spread fills the screen
+    desk.scrollTop = Math.max(0, el.offsetTop - 24);
+  }
+  updatePageNo();
+}
+$('#zin').onclick = () => zoomStep(1);
+$('#zout').onclick = () => zoomStep(-1);
+$('#zlabel').onclick = zoomFit;
+
+// Trackpad pinch (and Ctrl + mouse wheel): browsers send it as wheel events with ctrlKey set.
+// While the fingers move we scale the pages with CSS for instant feedback, then redraw them sharp at the new size.
+let pinch = null;
+function pinchBy(factor, cx, cy) {
+  if (!state.pdf) return;
+  if (cx == null || isNaN(cx)) [cx, cy] = viewCenter();
+  if (!pinch) {
+    closeNote(false);
+    const vr = viewer.getBoundingClientRect();
+    pinch = { f: 1, cx, cy, base: state.scale, focus: pageAt(cx, cy), t: 0 };
+    viewer.style.transformOrigin = `${cx - vr.left}px ${cy - vr.top}px`;
+    viewer.classList.add('pinching');
+  }
+  pinch.f = clamp(pinch.f * factor, ZMIN / pinch.base, ZMAX / pinch.base);
+  viewer.style.transform = `scale(${pinch.f})`;
+  clearTimeout(pinch.t);
+  pinch.t = setTimeout(endPinch, 220);
+}
+function endPinch() {
+  const p = pinch;
+  pinch = null;
+  if (!p) return;
+  if (Math.abs(p.f - 1) < 0.01) { viewer.style.transform = ''; viewer.classList.remove('pinching'); return; }
+  zoomTo(p.base * p.f, p.cx, p.cy, p.focus);
+}
+desk.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey) || !state.pdf) return;
+  e.preventDefault();
+  let d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+  d = clamp(d, -50, 50);
+  pinchBy(Math.exp(-d * 0.0045), e.clientX, e.clientY);
+}, { passive: false });
+// Safari on Mac reports trackpad pinch as gesture events
+let gestureScale = 1;
+desk.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; });
+desk.addEventListener('gesturechange', e => { e.preventDefault(); pinchBy(e.scale / gestureScale, e.clientX, e.clientY); gestureScale = e.scale; });
+desk.addEventListener('gestureend', e => e.preventDefault());
+
+/* ================= one page / two pages ================= */
+function setView(v, cover = state.cover) {
+  state.view = v;
+  state.cover = cover;
+  savePrefs();
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  $('#coverBtn').hidden = v !== 'spread';
+  $('#coverBtn').setAttribute('aria-pressed', String(cover));
+  if (!state.pdf) return;
+  const [cx] = viewCenter();
+  const dr = desk.getBoundingClientRect();
+  const focus = pageAt(cx, dr.top + 4);
+  state.zoom = 'fit';
+  build();
+  if (focus) desk.scrollTop = Math.max(0, state.pages[focus.i].el.offsetTop - 24);
+  updatePageNo();
+}
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+$('#coverBtn').onclick = () => setView('spread', !state.cover);
+
+/* ================= buttons, keys, drag & drop ================= */
+$('#openBtn').onclick = pickAndOpen;
+$('#openBtn2').onclick = pickAndOpen;
+$('#saveBtn').onclick = save;
+$('#undo').onclick = undo;
+$('#redo').onclick = redo;
+
+document.addEventListener('keydown', e => {
+  const typing = e.target.closest && e.target.closest('textarea,input,[contenteditable]');
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }
+  if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); pickAndOpen(); return; }
+  if (mod && state.pdf && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomStep(1); return; }
+  if (mod && state.pdf && (e.key === '-' || e.key === '_')) { e.preventDefault(); zoomStep(-1); return; }
+  if (mod && state.pdf && e.key === '0') { e.preventDefault(); zoomFit(); return; }
+  if (typing || !state.pdf) return;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (mod || e.altKey) return;
+  const map = { v: 'select', h: 'highlight', u: 'underline', p: 'ink', n: 'note', e: 'erase' };
+  const t = map[e.key.toLowerCase()];
+  if (t) { e.preventDefault(); setTool(t); }
+  else if (e.key === 'Escape') setTool('select');
+});
+
+const veil = $('#veil');
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; veil.hidden = false; });
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) veil.hidden = true; });
+window.addEventListener('drop', async e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0; veil.hidden = true;
+  const item = Array.from(e.dataTransfer.items).find(i => i.kind === 'file');
+  if (!item) return;
+  // both must be requested synchronously, before the drop event ends
+  const handlePromise = item.getAsFileSystemHandle ? item.getAsFileSystemHandle().catch(() => null) : Promise.resolve(null);
+  const file = item.getAsFile();
+  if (!file || !(/\.pdf$/i.test(file.name) || file.type === 'application/pdf')) { toast('PDF 파일만 열 수 있어요.', 'err'); return; }
+  if (state.loading || !confirmDiscard()) return;
+  const h = await handlePromise;
+  if (h && h.kind === 'file') await openFromHandle(h);
+  else await openBytes(new Uint8Array(await file.arrayBuffer()), file.name, null);
+});
+
+/* ================= sample document ================= */
+$('#sampleBtn').onclick = async () => {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.TimesRoman);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const page = doc.addPage([595, 842]);
+  const wrap = (txt, f, size, maxW) => {
+    const out = []; let line = '';
+    for (const w of txt.split(' ')) {
+      const t = line ? line + ' ' + w : w;
+      if (f.widthOfTextAtSize(t, size) > maxW && line) { out.push(line); line = w; } else line = t;
+    }
+    if (line) out.push(line);
+    return out;
+  };
+  let y = 760;
+  page.drawText('Chapter 4. Photosynthesis', { x: 64, y, size: 22, font: bold });
+  y -= 40;
+  const paras = [
+    'Photosynthesis is the process by which green plants, algae and some bacteria turn light energy into chemical energy. It takes place mainly in the chloroplasts of leaf cells, where the pigment chlorophyll absorbs red and blue light and reflects green.',
+    'The process has two stages. In the light-dependent reactions, which happen in the thylakoid membranes, water is split, oxygen is released, and the energy carriers ATP and NADPH are made.',
+    'In the Calvin cycle, which runs in the stroma, the enzyme RuBisCO fixes carbon dioxide from the air. ATP and NADPH from the first stage are used to build three-carbon sugars, which the plant later turns into glucose, starch and cellulose.',
+    'The overall equation is often written as: 6CO2 + 6H2O + light energy -> C6H12O6 + 6O2.',
+    'Rate is limited by light intensity, carbon dioxide concentration and temperature. Whichever factor is in shortest supply sets the pace, an idea known as the law of limiting factors.',
+  ];
+  for (const p of paras) {
+    for (const l of wrap(p, font, 13, 467)) { page.drawText(l, { x: 64, y, size: 13, font }); y -= 19; }
+    y -= 12;
+  }
+  const bytes = await doc.save();
+  if (!confirmDiscard()) return;
+  await openBytes(bytes, 'photosynthesis-sample.pdf', null);
+  toast('예제를 열었어요. 저장하면 저장할 위치를 물어봐요.');
+};
+
+/* ================= app: install, offline, open PDFs from the desktop ================= */
+if (location.protocol === 'file:') $('#fileNotice').hidden = false;
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e));
+}
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installEvent = e;
+  $('#installBtn').hidden = false;
+});
+$('#installBtn').onclick = async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  const choice = await installEvent.userChoice.catch(() => null);
+  installEvent = null;
+  $('#installBtn').hidden = true;
+  if (choice && choice.outcome === 'accepted') toast('설치했어요. 바탕화면이나 시작 메뉴에서 PDF 필기장을 열 수 있어요.');
+};
+window.addEventListener('appinstalled', () => { $('#installBtn').hidden = true; });
+// a PDF opened with "PDF 필기장" from the file explorer arrives here
+if ('launchQueue' in window) {
+  window.launchQueue.setConsumer(async params => {
+    const h = params.files && params.files[0];
+    if (!h || h.kind !== 'file') return;
+    if (state.loading || !confirmDiscard()) return;
+    try { await openFromHandle(h); }
+    catch (e) { toast('파일을 열지 못했어요: ' + e.message, 'err'); }
+  });
+}
+
+setTool('select');
+setView(state.view, state.cover);
+refreshUi();
+})();
+</script>
+</body>
+</html>
