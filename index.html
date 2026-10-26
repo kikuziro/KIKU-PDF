@@ -28,6 +28,7 @@
   --danger:#C2255C;
   --paper:#FFFFFF;
   --sel:rgba(29,78,216,.26);
+  --selbar:rgba(66,133,244,.34);   /* drawn on the white PDF page in both themes */
   --shadow:0 1px 2px rgba(18,28,48,.12),0 6px 18px rgba(18,28,48,.08);
   --f-ui:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -112,7 +113,9 @@ svg.ann .tmp-rect{fill:var(--sel);stroke:var(--accent);stroke-width:1;stroke-das
 .textLayer{position:absolute;text-align:initial;inset:0;overflow:hidden;line-height:1;-webkit-text-size-adjust:none;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;z-index:2}
 .textLayer :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
 .textLayer span.markedContent{top:0;height:0}
-.textLayer ::selection{background:var(--sel)}
+.textLayer ::selection{background:transparent}
+.selLayer{position:absolute;inset:0;z-index:1;pointer-events:none;mix-blend-mode:multiply}
+.selLayer i{position:absolute;display:block;border-radius:3px;background:var(--selbar)}
 .textLayer br::selection{background:transparent}
 .textLayer .endOfContent{display:block;position:absolute;inset:100% 0 0;z-index:-1;cursor:default;user-select:none;-webkit-user-select:none}
 .textLayer.selecting .endOfContent{top:0}
@@ -1057,6 +1060,7 @@ async function save() {
 /* ================= tools ================= */
 function setTool(t) {
   state.tool = t;
+  document.documentElement.style.setProperty('--selbar', t === 'highlight' ? state.color.highlight + 'AA' : 'rgba(66,133,244,.34)');
   document.body.className = document.body.className.replace(/\bt-\w+/g, '').trim() + ' t-' + t;
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   renderSwatches();
@@ -1075,7 +1079,8 @@ function renderSwatches() {
       b.title = name;
       b.setAttribute('aria-label', name);
       b.setAttribute('aria-pressed', String(state.color[state.tool].toLowerCase() === hex.toLowerCase()));
-      b.onclick = () => { state.color[state.tool] = hex; savePrefs(); renderSwatches(); };
+      b.onclick = () => { state.color[state.tool] = hex; savePrefs(); renderSwatches();
+        if (state.tool === 'highlight') document.documentElement.style.setProperty('--selbar', hex + 'AA'); };
       box.appendChild(b);
     }
   }
@@ -1129,10 +1134,12 @@ function mergeRects(rs) {
   return out;
 }
 
-// Turn the current text selection into highlight / underline marks (works across pages).
-function applySelection(type) {
+// The current text selection as raw boxes per page (only selections made in the PDF's text).
+function selectionPerPage() {
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return [];
+  const inText = n => { const el = n && (n.nodeType === 1 ? n : n.parentElement); return !!(el && el.closest('.textLayer')); };
+  if (!inText(sel.anchorNode) && !inText(sel.focusNode)) return [];
   const rects = [];
   for (let k = 0; k < sel.rangeCount; k++) for (const r of sel.getRangeAt(k).getClientRects()) rects.push(r);
   const perPage = [];
@@ -1148,13 +1155,37 @@ function applySelection(type) {
     }
     if (list.length) perPage.push([pg, list]);
   }
+  return perPage;
+}
+
+// Draw the selection ourselves: one even bar per line instead of the browser's overlapping word boxes.
+let selPages = new Set(), selRaf = 0;
+function drawSelection() {
+  selRaf = 0;
+  const now = new Set();
+  for (const [pg, list] of selectionPerPage()) {
+    let lay = pg.el.querySelector('.selLayer');
+    if (!lay) { lay = document.createElement('div'); lay.className = 'selLayer'; pg.el.appendChild(lay); }
+    const pad = 1;
+    lay.innerHTML = mergeRects(list).map(x =>
+      `<i style="left:${r2(x.l - pad)}px;top:${r2(x.t - pad)}px;width:${r2(x.r - x.l + pad * 2)}px;height:${r2(x.b - x.t + pad * 2)}px"></i>`).join('');
+    now.add(pg);
+  }
+  for (const pg of selPages) if (!now.has(pg) && pg.el) { const lay = pg.el.querySelector('.selLayer'); if (lay) lay.textContent = ''; }
+  selPages = now;
+}
+document.addEventListener('selectionchange', () => { if (!selRaf) selRaf = requestAnimationFrame(drawSelection); });
+
+// Turn the current text selection into highlight / underline marks (works across pages).
+function applySelection(type) {
+  const perPage = selectionPerPage();
   if (!perPage.length) return false;
   pushUndo();
   for (const [pg, list] of perPage) {
     const quads = mergeRects(list).map(x => rectToQuad(pg.vp, x.l, x.t, x.r, x.b));
     addAnnot({ type, page: pg.i, color: state.color[type], quads });
   }
-  sel.removeAllRanges();
+  window.getSelection().removeAllRanges();
   refreshUi();
   return true;
 }
